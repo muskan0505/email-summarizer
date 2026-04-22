@@ -1,59 +1,72 @@
-// Wait until popup loads
 document.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("inputText");
   const output = document.getElementById("output");
-  const button = document.getElementById("summarizeBtn");
+  const copyBtn = document.getElementById("copyBtn");
 
-  // 🔥 Auto-capture selected text from active tab
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (!tabs[0]) return;
+    const tab = tabs[0];
+    const url = tab.url || "";
+
+    // 🚫 Block restricted pages
+    if (
+      url.startsWith("chrome://") ||
+      url.startsWith("edge://") ||
+      url.includes("chrome.google.com") ||
+      url.includes("chatgpt.com")
+    ) {
+      output.innerText = "❌ Cannot run on this page. Try another website.";
+      return;
+    }
 
     chrome.scripting.executeScript(
       {
-        target: { tabId: tabs[0].id },
+        target: { tabId: tab.id },
         func: () => window.getSelection().toString()
       },
-      (results) => {
-        if (results && results[0] && results[0].result) {
-          input.value = results[0].result;
+      async (results) => {
+        try {
+          const text = results?.[0]?.result;
+
+          if (!text || text.trim() === "") {
+            output.innerText = "⚠️ Please select some text.";
+            return;
+          }
+
+          input.value = text;
+          output.innerText = "⏳ Summarizing...";
+
+          const res = await fetch("http://127.0.0.1:8000/summarize", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ text })
+          });
+
+          if (!res.ok) {
+            throw new Error("Server error");
+          }
+
+          const data = await res.json();
+          output.innerText = data.summary || "No summary generated.";
+
+        } catch (err) {
+          console.error(err);
+          output.innerText = "❌ Error: Backend not reachable.";
         }
       }
     );
   });
 
-  // 🚀 Summarize button click
-  button.addEventListener("click", async () => {
-    const text = input.value.trim();
+  // 📋 Copy summary
+  copyBtn.addEventListener("click", () => {
+    const text = output.innerText;
+    if (!text) return;
 
-    if (!text) {
-      output.innerText = "⚠️ Please enter or select some text.";
-      return;
-    }
-
-    try {
-      // 🔄 Show loading state
-      output.innerText = "⏳ Summarizing...";
-
-      const response = await fetch("http://127.0.0.1:8000/summarize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ text })
-      });
-
-      if (!response.ok) {
-        throw new Error("Server error");
-      }
-
-      const data = await response.json();
-
-      // ✅ Show summary
-      output.innerText = data.summary || "No summary generated.";
-
-    } catch (error) {
-      console.error(error);
-      output.innerText = "❌ Failed to connect to backend. Make sure server is running.";
-    }
+    navigator.clipboard.writeText(text);
+    copyBtn.innerText = "Copied!";
+    setTimeout(() => {
+      copyBtn.innerText = "Copy Summary";
+    }, 1500);
   });
 });
