@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Smart Summarizer",
+  "version": "1.0",
+  "description": "Summarize selected text instantly",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
